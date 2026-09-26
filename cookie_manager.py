@@ -82,6 +82,7 @@ PLATFORM_META: dict[str, dict] = {
         "label": "Bilibili",
         "domain": ".bilibili.com",
         "home": "https://www.bilibili.com/",
+        "login": "https://passport.bilibili.com/login",
         "exclusive": ("SESSDATA", "bili_jct", "DedeUserID", "buvid3", "buvid4", "b_nut"),
         "signature": ("sid", "b_lsid", "browser_resolution"),
         "login_keys": (("SESSDATA", "bili_jct"),),
@@ -101,6 +102,7 @@ PLATFORM_META: dict[str, dict] = {
         "label": "微博",
         "domain": ".weibo.com",
         "home": "https://weibo.com/",
+        "login": "https://passport.weibo.com/signin/login",
         "exclusive": ("SUB", "SUBP", "SSOLoginState", "WBPSESS", "ALF", "SCF"),
         "signature": ("XSRF-TOKEN", "_s_tentry", "UOR", "Apache", "ULV"),
         "login_keys": (("SUB",), ("SUBP", "SSOLoginState")),
@@ -1112,6 +1114,21 @@ def _update_screenshot(page, ctx) -> None:
         pass
 
 
+def _try_open_login(page) -> None:
+    """无头登录：尝试点击页面上的「登录」链接/按钮，使二维码或登录面板弹出。"""
+    try:
+        page.get_by_role("link", name=re.compile(r"(登录|登入|Sign\\s*in|Log\\s*in)", re.I)).first.click(timeout=5000)
+        page.wait_for_timeout(2000)
+        return
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        page.get_by_role("button", name=re.compile(r"(登录|登入|Sign\\s*in|Log\\s*in)", re.I)).first.click(timeout=4000)
+        page.wait_for_timeout(2000)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 # 通用「已登录」启发式：不依赖各平台特有 login_keys，登录后通常会出现一组服务端下发的会话型 Cookie。
 # 关键约束：必须命中「明确的登录凭证型 Cookie 名」且是服务端下发（HttpOnly 或长期有效），
 # 否则极易把「页面一加载就种下的设备/追踪 Cookie（webid、ttwid、csrf、did…）」误判为登录态，
@@ -1168,7 +1185,8 @@ def capture_login(platform: str = "auto", timeout: int = 240, headless: bool = F
     store = store or CookieStore()
     from urllib.parse import urlparse
 
-    nav_url = (url or "").strip() or (PLATFORM_META.get(platform, {}) or {}).get("home")
+    meta0 = PLATFORM_META.get(platform, {}) or {}
+    nav_url = (url or "").strip() or (meta0.get("login") if headless else None) or meta0.get("home")
     if not nav_url:
         return {"ok": False, "error": "请选择平台，或在网址框中输入要登录的网站地址。"}
     # 预备 profile 键（用于跨次持久化登录态）
@@ -1210,6 +1228,8 @@ def capture_login(platform: str = "auto", timeout: int = 240, headless: bool = F
                 pass
             time.sleep(1.5)
             if headless:
+                # 无头模式用户无法点击，自动点开「登录」入口（二维码/登录面板）后截图
+                _try_open_login(page)
                 _update_screenshot(page, ctx)
             baseline = {c["name"] for c in ctx.cookies() if c.get("name")}
             _set_state(message=f"请在浏览器中登录（扫码或账号密码）。登录成功后会自动抓取 Cookie。剩余 {timeout}s")
