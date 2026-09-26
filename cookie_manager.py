@@ -1295,6 +1295,7 @@ def capture_login(platform: str = "auto", timeout: int = 240, headless: bool = F
                                    f"剩余 {left}s。登录后点【抓取】或弹窗【确认保存】即可保存。")
                 if headless:
                     _update_screenshot(page, ctx)
+                _drain_login_events(page)
                 page.wait_for_timeout(2000)
             else:
                 # 超时：保存当前 Cookie；若已检测到登录态则按登录态保存，避免误标匿名
@@ -1340,37 +1341,57 @@ def stop_login() -> dict:
     return {"ok": True, "message": "已请求停止登录任务，浏览器即将关闭。"}
 
 
-LOGIN_CTRL: dict = {"page": None}
+import queue as _queue
+
+
+LOGIN_CTRL: dict = {"page": None, "queue": _queue.Queue()}
+
+
+def _drain_login_events(page):
+    """在登录线程内执行队列中的画面操作。
+
+    Playwright 同步 API 绑定创建线程，HTTP 线程不能直接调用 page 方法，
+    因此前端点击/输入请求先进队列，由登录线程在自身循环中消费执行。
+    """
+    q = LOGIN_CTRL.get("queue")
+    if q is None or page is None:
+        return
+    while True:
+        try:
+            ev = q.get_nowait()
+        except _queue.Empty:
+            break
+        kind = ev[0]
+        try:
+            if kind == "click":
+                _, x, y = ev
+                vs = page.viewport_size or {"width": 1280, "height": 860}
+                px = max(0, min(1000, int(x))) / 1000.0 * vs["width"]
+                py = max(0, min(1000, int(y))) / 1000.0 * vs["height"]
+                page.mouse.click(px, py)
+            elif kind == "type":
+                page.keyboard.type(ev[1])
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def login_click(x: int = 500, y: int = 500) -> dict:
-    """在无头登录实时画面上点击（坐标 0-1000 相对比例），用于聚焦输入框等。"""
-    page = LOGIN_CTRL.get("page")
-    if page is None or not LOGIN_STATE.get("running"):
+    """请求在无头登录实时画面上点击（坐标 0-1000 相对比例），由登录线程执行。"""
+    if LOGIN_CTRL.get("page") is None or not LOGIN_STATE.get("running"):
         return {"ok": False, "error": "没有进行中的登录任务。"}
-    try:
-        vs = page.viewport_size or {"width": 1280, "height": 860}
-        px = max(0, min(1000, int(x))) / 1000.0 * vs["width"]
-        py = max(0, min(1000, int(y))) / 1000.0 * vs["height"]
-        page.mouse.click(px, py)
-        return {"ok": True, "message": f"已点击画面 ({x}, {y})。"}
-    except Exception as e:  # noqa: BLE001
-        return {"ok": False, "error": f"点击失败：{e}"}
+    LOGIN_CTRL["queue"].put(("click", int(x), int(y)))
+    return {"ok": True, "message": f"已加入操作队列：点击画面 ({x}, {y})。"}
 
 
 def login_input(text: str = "") -> dict:
-    """向无头登录浏览器输入文字（发送到当前聚焦元素，如手机号输入框）。"""
-    page = LOGIN_CTRL.get("page")
-    if page is None or not LOGIN_STATE.get("running"):
+    """请求向无头登录浏览器输入文字（发送到当前聚焦元素，如手机号输入框）。"""
+    if LOGIN_CTRL.get("page") is None or not LOGIN_STATE.get("running"):
         return {"ok": False, "error": "没有进行中的登录任务。"}
     if not text:
         return {"ok": False, "error": "请输入要发送的文字。"}
-    try:
-        page.keyboard.type(text)
-        shown = text[:20] + ("…" if len(text) > 20 else "")
-        return {"ok": True, "message": f"已输入：{shown}"}
-    except Exception as e:  # noqa: BLE001
-        return {"ok": False, "error": f"输入失败：{e}"}
+    shown = text[:20] + ("…" if len(text) > 20 else "")
+    LOGIN_CTRL["queue"].put(("type", text))
+    return {"ok": True, "message": f"已加入操作队列：输入 {shown}"}
 
 
 def start_login_async(platform: str = "auto", timeout: int = 240, headless: bool = False,
