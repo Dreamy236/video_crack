@@ -44,6 +44,15 @@ log "4/6 安装 Playwright Chromium（含系统依赖，约 1-3 分钟；失败�
 
 log "5/6 配置 systemd 常驻服务（开机自启 + 崩溃自动重启）"
 mkdir -p "$APP_DIR/cookies" "$APP_DIR/downloads" "$APP_DIR/results"
+# 服务以普通用户运行更安全；默认取代码目录属主（root 部署后手动 chown 的场景也兼容）
+RUN_USER=${RUN_USER:-$(stat -c %U "$APP_DIR" 2>/dev/null || echo root)}
+if [ "$RUN_USER" = "root" ] && [ -d "/home/ubuntu" ]; then RUN_USER=ubuntu; fi
+chown -R "$RUN_USER:$RUN_USER" "$APP_DIR" 2>/dev/null || true
+# Playwright 浏览器安装于用户缓存目录，显式指定保证能找到（sudo 部署时 HOME 易漂移）
+PW_PATH=${PLAYWRIGHT_BROWSERS_PATH:-}
+if [ -z "$PW_PATH" ]; then
+  if [ "$RUN_USER" = "root" ]; then PW_PATH=/root/.cache/ms-playwright; else PW_PATH=/home/$RUN_USER/.cache/ms-playwright; fi
+fi
 cat > /etc/systemd/system/${SERVICE}.service <<EOF
 [Unit]
 Description=VideoLinkCollector (多平台视频链接采集与下载)
@@ -52,9 +61,12 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=$RUN_USER
+Group=$RUN_USER
 WorkingDirectory=$APP_DIR
 Environment=HOST=0.0.0.0
 Environment=PORT=$PORT
+Environment=PLAYWRIGHT_BROWSERS_PATH=$PW_PATH
 ExecStart=$APP_DIR/.venv/bin/python $APP_DIR/app.py
 Restart=always
 RestartSec=5
