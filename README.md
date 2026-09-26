@@ -143,6 +143,55 @@ python app.py
 
 ---
 
-## 七、许可证与免责
+## 七、GitHub Pages 部署（静态演示 / 前后端分离）
+
+> 说明：GitHub Pages 只能托管**静态文件**，Python 后端（`app.py`）无法在上面运行。
+> 因此本项目提供两种在 Pages 上可用的形态，前端已内置「静态演示模式」，页面可完整渲染。
+
+### 方式一：纯静态演示页（开箱即用）
+
+1. 把本仓库推到 GitHub（`main` / `master` 分支均可）。
+2. 仓库 **Settings → Pages → Source** 选择 **GitHub Actions**（本仓库已自带 `.github/workflows/pages.yml`，会自动把 `frontend/` 发布为站点），或选择「Deploy from a branch」指向 `gh-pages`。
+3. 打开 `https://<你的用户名>.github.io/video_crack/`：
+
+   - 页面**完整渲染**，顶部显示「🎬 GitHub Pages 静态演示模式」横幅。
+   - 点横幅上的「🎬 加载演示数据」可一键填充 4 个页签（链接检索 / yt-dlp 下载 / Cookie 管理 / 下载列表）的示例内容，筛选、排序、导出 MD/CSV/TXT、主题切换等纯前端功能均可实际操作。
+   - 真实采集 / 下载 / 登录按钮会给出友好引导（需本地运行后端）。
+
+### 方式二：前后端分离（真实功能）
+
+前端静态托管在 GitHub Pages，后端运行在你自己的机器 / 服务器：
+
+1. 在任意有 Python 3.10+ 的机器上启动后端：
+
+   ```bash
+   pip install -r requirements.txt
+   playwright install chromium
+   python app.py        # 监听 http://127.0.0.1:8000/（HOST/PORT 可改）
+   ```
+
+2. 浏览器访问 Pages 地址并携带后端地址：
+
+   ```
+   https://<你的用户名>.github.io/video_crack/?api=http://127.0.0.1:8000
+   ```
+
+   或打开页面后在控制台设置 `window.API_BASE = 'http://127.0.0.1:8000'` 后刷新。
+
+   > 注意：GitHub Pages 是 HTTPS，跨源调用本地 `http://127.0.0.1` 后端会被浏览器**混合内容**策略拦截。
+   > 请改用带 HTTPS 的后端地址（如部署到支持 HTTPS 的服务器 / 内网穿透），后端已内置 CORS 预检支持。
+
+### 本地直接预览静态页（不部署）
+
+把 `frontend/` 整个目录用任意静态服务器打开即可看到演示模式效果，例如：
+
+```bash
+cd frontend && python -m http.server 8080
+# 浏览器访问 http://127.0.0.1:8080/
+```
+
+---
+
+## 八、许可证与免责
 
 本程序仅用于下载你**有权下载**的内容，请遵守各平台服务条款与当地法律法规。

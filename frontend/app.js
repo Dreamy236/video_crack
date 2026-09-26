@@ -28,17 +28,192 @@
   }
 })();
 
-// 后端连通性自检：后端不可达时显示明确提示，避免静默失败
+// 后端连通性自检：后端不可达时自动进入「静态演示模式」。
+// GitHub Pages 纯静态托管 / 本地未启动后端时：页面完整渲染、加载演示数据、
+// 按钮给出友好引导；真实解析 / 下载 / 登录功能需本地运行 Python 后端（README 有说明）。
+let DEMO = false;
+
+// ---- 演示模式数据（仅用于静态预览时填充 UI，均为示例内容） ----
+const DEMO_PLATFORMS = [
+  { platform: 'bilibili', label: 'Bilibili', configured: true, logged_in: true, expired: false, count: 18,
+    expires_text: '2027-01-12', saved_at: '2026-09-01 10:24:00', device_ready: true, profile_ready: true },
+  { platform: 'douyin', label: '抖音', configured: true, logged_in: true, expired: false, count: 9,
+    expires_text: '2026-12-30', saved_at: '2026-09-10 22:05:31', device_ready: true, profile_ready: true },
+  { platform: 'kuaishou', label: '快手', configured: true, logged_in: false, expired: false, count: 4,
+    expires_text: '匿名', saved_at: '2026-09-02 09:12:44', device_ready: false, profile_ready: false },
+  { platform: 'weibo', label: '微博', configured: false, count: 0, expires_text: '—' },
+  { platform: 'xiaohongshu', label: '小红书', configured: false, count: 0, expires_text: '—' },
+  { platform: 'youtube', label: 'YouTube', configured: true, logged_in: false, expired: false, count: 2,
+    expires_text: '匿名', saved_at: '2026-09-03 15:40:12', device_ready: false, profile_ready: false },
+];
+const DEMO_ALL = [
+  { id: 'demo-b1', platform: 'bilibili', keyword: '前端动画', title: '【前端动画】用 CSS 实现丝滑的滚动视差效果', author: '自然-', duration: 812, likes: 23451, views: 1023489, url: 'https://www.bilibili.com/video/BV1Demo00001' },
+  { id: 'demo-b2', platform: 'bilibili', keyword: 'JavaScript', title: 'JavaScript 事件循环机制完全解析（微任务 / 宏任务）', author: '前端食堂', duration: 1254, likes: 9876, views: 456123, url: 'https://www.bilibili.com/video/BV1Demo00002' },
+  { id: 'demo-d1', platform: 'douyin', keyword: '美食', title: '三分钟教会你外酥里嫩的黄金脆皮炸鸡', author: '小厨娘', duration: 187, likes: 45213, views: 2310000, url: 'https://www.douyin.com/video/7300000000000000001' },
+  { id: 'demo-d2', platform: 'douyin', keyword: '旅行', title: '老城街巷的烟火气，跟着镜头走一遍', author: 'Ashley_hh_', duration: 243, likes: 12034, views: 890123, url: 'https://www.douyin.com/video/7300000000000000002' },
+  { id: 'demo-k1', platform: 'kuaishou', keyword: '健身', title: '居家徒手增肌训练计划（新手友好）', author: '铁馆老张', duration: 556, likes: 7654, views: 234567, url: 'https://www.kuaishou.com/short-video/3xDemoK0001' },
+  { id: 'demo-w1', platform: 'weibo', keyword: '科技', title: '国产大模型新版本实测：代码能力横向对比', author: '科技老白', duration: 640, likes: 3456, views: 120456, url: 'https://weibo.com/1234567890/OKDemoW0001' },
+  { id: 'demo-x1', platform: 'xiaohongshu', keyword: '穿搭', title: '通勤穿搭｜5 套显瘦又不失高级感的基础款', author: 'Momo酱', duration: 95, likes: 19876, views: 765432, url: 'https://www.xiaohongshu.com/explore/65demo0001' },
+  { id: 'demo-y1', platform: 'youtube', keyword: 'music', title: 'Lo-fi Beats to Study / Relax To（4K 循环）', author: 'Lofi Girl', duration: 3600, likes: 567890, views: 8890012, url: 'https://www.youtube.com/watch?v=demo0001' },
+];
+const DEMO_BATCH = [
+  { id: 'bd-1', platform: 'bilibili', title: '【合集】Vue3 源码精读 01-05', uploader: '自然-', duration: 18600, likes: 15230, views: 980123, url: 'https://www.bilibili.com/video/BV1Demo00003', thumbnail: '', cover_file: '' },
+  { id: 'bd-2', platform: 'bilibili', title: '【分P】TypeScript 类型体操入门（共 8P）', uploader: '前端食堂', duration: 5400, likes: 4321, views: 234567, url: 'https://www.bilibili.com/video/BV1Demo00004', thumbnail: '', cover_file: '' },
+  { id: 'bd-3', platform: 'douyin', title: '泉州蟳埔簪花围体验全记录', uploader: 'Ashley_hh_', duration: 218, likes: 8765, views: 654321, url: 'https://www.douyin.com/video/7300000000000000003', thumbnail: '', cover_file: '' },
+  { id: 'bd-4', platform: 'kuaishou', title: '健身房器械使用避坑指南（上）', uploader: '铁馆老张', duration: 920, likes: 2345, views: 123456, url: 'https://www.kuaishou.com/short-video/3xDemoK0002', thumbnail: '', cover_file: '' },
+  { id: 'bd-5', platform: 'youtube', title: 'Build a Full-Stack App in 40 Minutes', uploader: 'Dev World', duration: 2400, likes: 12345, views: 890123, url: 'https://www.youtube.com/watch?v=demo0002', thumbnail: '', cover_file: '' },
+];
+const DEMO_HISTORY = [
+  { id: 'dh-1', platform: 'bilibili', title: '【前端动画】用 CSS 实现丝滑的滚动视差效果', author: '自然-', likes: 23451, size: 268435456, status: 'done', finished_at: '2026-09-25 21:14:03', path: 'downloads/【前端动画】用CSS实现丝滑的滚动视差效果 - 自然-[13分32秒].mp4', cover: '', cover_file: '' },
+  { id: 'dh-2', platform: 'bilibili', title: 'JavaScript 事件循环机制完全解析（微任务 / 宏任务）', author: '前端食堂', likes: 9876, size: 429496730, status: 'done', finished_at: '2026-09-25 20:02:11', path: 'downloads/JavaScript 事件循环机制完全解析 - 前端食堂-[20分54秒].mp4', cover: '', cover_file: '' },
+  { id: 'dh-3', platform: 'douyin', title: '三分钟教会你外酥里嫩的黄金脆皮炸鸡', author: '小厨娘', likes: 45213, size: 52428800, status: 'done', finished_at: '2026-09-24 19:33:27', path: 'downloads/三分钟教会你外酥里嫩的黄金脆皮炸鸡 - 小厨娘[03分07秒].mp4', cover: '', cover_file: '' },
+  { id: 'dh-4', platform: 'youtube', title: 'Lo-fi Beats to Study / Relax To（4K 循环）', author: 'Lofi Girl', likes: 567890, size: 1073741824, status: 'skipped', finished_at: '2026-09-24 10:15:09', path: 'downloads/Lo-fi Beats to Study 4K - Lofi Girl[60分00秒].mp4', cover: '', cover_file: '' },
+  { id: 'dh-5', platform: 'kuaishou', title: '居家徒手增肌训练计划（新手友好）', author: '铁馆老张', likes: 7654, size: 67108864, status: 'error', finished_at: '2026-09-23 22:41:55', path: 'downloads/居家徒手增肌训练计划 - 铁馆老张[09分16秒].mp4', cover: '', cover_file: '' },
+];
+
+// ---- 演示模式工具函数 ----
+function demoJson(obj, status) {
+  return Promise.resolve(new Response(JSON.stringify(obj), {
+    status: status || 200, headers: { 'Content-Type': 'application/json' },
+  }));
+}
+function demoText(text, type) {
+  return Promise.resolve(new Response(text, {
+    status: 200, headers: { 'Content-Type': type || 'text/plain; charset=utf-8' },
+  }));
+}
+function demoSse(message) {
+  const enc = new TextEncoder();
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(enc.encode('event: error\ndata: ' + JSON.stringify({ message: message || '演示模式：该功能需本地运行后端' }) + '\n\n'));
+      controller.close();
+    },
+  });
+  return Promise.resolve(new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
+}
+function demoImg() {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180">'
+    + '<rect width="100%" height="100%" fill="#e9edf6"/>'
+    + '<text x="50%" y="46%" font-size="15" fill="#8a94b0" text-anchor="middle">演示封面</text>'
+    + '<text x="50%" y="66%" font-size="12" fill="#aab3c8" text-anchor="middle">真实图片由本地后端提供</text>'
+    + '</svg>';
+  return Promise.resolve(new Response(svg, { status: 200, headers: { 'Content-Type': 'image/svg+xml; charset=utf-8' } }));
+}
+function demoImportResponse(opts) {
+  let body = {};
+  try { body = JSON.parse((opts && opts.body) || '{}'); } catch (e) {}
+  const raw = String(body.raw || '');
+  const count = raw ? Math.max(1, Math.min(20, Math.ceil(raw.length / 15))) : 0;
+  const plat = (body.platform && body.platform !== 'auto') ? body.platform : '自动识别';
+  return demoJson({ ok: true, label: '（演示）' + plat, format: 'demo', count: count, logged_in: true,
+    expires_text: '演示模式·未落盘', netscape_file: 'demo_cookies.txt',
+    warning: '演示模式：Cookie 未真正写入本地文件，仅展示完整流程。',
+    platforms: DEMO_PLATFORMS });
+}
+
+// 演示模式下拦截所有 /api 与 /downloads 请求，返回演示响应或友好引导
+function wrapFetchForDemo() {
+  const origFetch = window.fetch.bind(window);
+  window.fetch = function (url, opts) {
+    const u = String(url);
+    const p = u.split('?')[0].split('#')[0];
+    const isApi = p.includes('/api/');
+    const isDl = p.includes('/downloads/');
+    if (!isApi && !isDl) return origFetch(url, opts);
+    if (isDl) return demoJson({ ok: false, error: '演示模式：文件不存在（需本地后端）' }, 404);
+    const method = ((opts && opts.method) || 'GET').toUpperCase();
+    if (p === '/api/health') return demoJson({ ok: false }, 503);
+    if (p === '/api/cookies') return demoJson({ ok: true, playwright: false, platforms: DEMO_PLATFORMS });
+    if (p === '/api/cookies/login_status') return demoJson({ ok: true, running: false, message: '演示模式：未启动浏览器登录' });
+    if (p === '/api/cookies/export') return demoText('# Netscape HTTP Cookie File（演示导出）\n# 真实 Cookie 需本地运行后端后导出\n', 'text/plain; charset=utf-8');
+    if (p === '/api/ytdlp/check') return demoJson({ ok: true, available: false, version: '—', ffmpeg: false, demo: true });
+    if (p === '/api/downloads/history') return demoJson({ ok: true, items: DEMO_HISTORY });
+    if (p === '/api/img' || p === '/api/files/serve') return demoImg();
+    if (method === 'GET') return demoJson({ ok: false, error: '演示模式：该接口需本地运行 Python 后端' }, 404);
+    if (p === '/api/collect' || p === '/api/download' || p === '/api/batch/download')
+      return demoSse('演示模式：采集 / 下载需本地运行 Python 后端（README 有部署说明）');
+    if (p === '/api/cookies/import') return demoImportResponse(opts);
+    if (p === '/api/cookies/probe') return demoJson({ ok: true, status: 'valid', message: '演示模式：未发起真实探活', platforms: DEMO_PLATFORMS });
+    if (p === '/api/cookies/selfcheck') return demoJson({
+      ok: true, headline: '演示模式 · 未在线探活（本地后端可做真实自检）',
+      platforms: DEMO_PLATFORMS.map(function (pp) {
+        return { label: pp.label, platform: pp.platform, configured: pp.configured,
+                 logged_in: pp.logged_in, grade: pp.configured ? 'warn' : 'skip', probe: null, checks: [] };
+      }),
+      advice: ['运行本地后端后，可在「Cookie 管理」发起真实在线自检。'],
+      platforms_status: DEMO_PLATFORMS,
+    });
+    if (p === '/api/cookies/clear') return demoJson({ ok: true, removed: false, platforms: DEMO_PLATFORMS });
+    if (p === '/api/cookies/login' || p === '/api/cookies/login_capture') return demoJson({ ok: false, error: '演示模式：浏览器登录需本地运行 Python 后端' });
+    if (p === '/api/batch/info') return demoJson({ ok: true, items: DEMO_BATCH, notes: ['演示模式：返回示例链接清单'], count: DEMO_BATCH.length, playlist_detected: [] });
+    if (p === '/api/batch/detect') return demoJson({ ok: true, is_playlist: false });
+    if (p === '/api/download/info') return demoJson({ ok: false, error: '演示模式：格式解析需本地运行 Python 后端' });
+    if (p === '/api/downloads/delete') return demoJson({ ok: true, removed_ids: [] });
+    if (p === '/api/downloads/save') return demoJson({ ok: true });
+    if (p === '/api/dl/control') return demoJson({ ok: true });
+    if (p === '/api/collect_links') return demoJson({ ok: true, items: DEMO_ALL, notes: ['演示模式'], count: DEMO_ALL.length });
+    return demoJson({ ok: false, error: '演示模式：真实功能需本地运行 Python 后端（README 有部署说明）' });
+  };
+}
+
+// 一键填充四个页签的演示数据
+function loadDemoData() {
+  ALL = DEMO_ALL.slice();
+  render();
+  const ns = $('notes'); if (ns) ns.classList.add('hidden');
+  const md = $('mdCard'); if (md) md.classList.add('hidden');
+  BATCH = DEMO_BATCH.slice();
+  BSEL.clear();
+  BATCH.forEach(function (en) { BSEL.add(en.id); });
+  renderBatch();
+  if (!DL_INIT) loadDownloads();
+  DL_HISTORY = DEMO_HISTORY.slice();
+  renderDownloads();
+  CK_LIST = DEMO_PLATFORMS.slice();
+  renderCookies(CK_LIST);
+  toast('演示数据已加载：四个页签均已填充示例内容');
+}
+
+function showDemoBanner() {
+  const old = document.getElementById('backendWarn');
+  if (old) old.remove();
+  let bar = document.getElementById('demoBanner');
+  if (!bar) { bar = document.createElement('div'); bar.id = 'demoBanner'; document.body.appendChild(bar); }
+  bar.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:9999;'
+    + 'background:linear-gradient(135deg,#5b6cff,#b15bff);color:#fff;font-size:13px;'
+    + 'padding:12px 16px;line-height:1.8;box-shadow:0 2px 14px rgba(0,0,0,.2)';
+  bar.innerHTML = '<div style="max-width:980px;margin:0 auto;display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">'
+    + '<div style="flex:1;min-width:260px">'
+    + '<b>🎬 GitHub Pages 静态演示模式</b> —— 界面已完整渲染；真实的链接解析 / 下载 / Cookie 登录需本地运行 Python 后端。<br/>'
+    + '① 本地运行：<code style="background:rgba(255,255,255,.18);padding:1px 6px;border-radius:5px">python app.py</code> 后访问 '
+    + '<code style="background:rgba(255,255,255,.18);padding:1px 6px;border-radius:5px">http://127.0.0.1:8000/</code>；'
+    + '② 或在本页 URL 后加 <code style="background:rgba(255,255,255,.18);padding:1px 6px;border-radius:5px">?api=https://你的后端地址</code>。'
+    + '</div>'
+    + '<button id="demoLoadBtn" style="background:#fff;color:#5b6cff;border:none;border-radius:10px;'
+    + 'padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;margin-top:2px;white-space:nowrap">🎬 加载演示数据</button>'
+    + '</div>';
+  const btn = bar.querySelector('#demoLoadBtn');
+  if (btn) btn.onclick = function () { loadDemoData(); btn.textContent = '✓ 演示数据已加载'; };
+}
+
+function setDemoMode() {
+  if (DEMO) return;
+  DEMO = true;
+  wrapFetchForDemo();
+  showDemoBanner();
+  document.body.style.paddingTop = '74px';
+  if (typeof loadCookies === 'function') loadCookies();
+  if (typeof checkYtdlp === 'function') checkYtdlp();
+}
+
+// 后端连通性自检：不可达则进入演示模式（GitHub Pages / 未启动后端）
 (function () {
   const au = (typeof window.assetUrl === 'function') ? window.assetUrl : function (p) { return p; };
-  const bar = document.createElement('div');
-  bar.id = 'backendWarn';
-  bar.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:9999;background:#e5484d;color:#fff;font-size:13px;padding:10px 16px;text-align:center;line-height:1.7';
-  bar.innerHTML = '⚠ 无法连接后端服务（/api/health 无响应）。本页为纯前端，须配合 Python 后端运行：①本地启动后端后访问其地址；②或在本页 URL 后加 <b>?api=https://你的后端地址</b> 指向已部署的后端。';
-  function show() { if (document.body && !document.getElementById('backendWarn')) document.body.appendChild(bar); }
   try {
-    fetch(au('/api/health')).then(function (r) { return r.ok ? null : Promise.reject(); }).catch(show);
-  } catch (e) { show(); }
+    fetch(au('/api/health')).then(function (r) { return r.ok ? null : Promise.reject(); })
+      .catch(function () { setTimeout(setDemoMode, 0); });
+  } catch (e) { setTimeout(setDemoMode, 0); }
 })();
 
 const $ = (id) => document.getElementById(id);
@@ -341,6 +516,13 @@ function renderCkBar(list) {
 }
 
 async function loadCookies() {
+  if (DEMO) {
+    PW_OK = false;
+    $('pwTag').textContent = '演示模式 · 本地后端可用 Playwright';
+    renderCookies(DEMO_PLATFORMS);
+    checkYtdlp();
+    return;
+  }
   try {
     const r = await fetch('/api/cookies'); const d = await r.json();
     PW_OK = !!d.playwright;
@@ -596,6 +778,7 @@ const fmtSec = (s) => { if (!s) return '—'; s = Math.round(s); const h = Math.
   return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
 
 async function checkYtdlp() {
+  if (DEMO) { $('ydTag').textContent = 'yt-dlp 未连接 · 演示模式（本地运行后端后可用）'; return; }
   try {
     const d = await (await fetch('/api/ytdlp/check')).json();
     $('ydTag').textContent = d.available
@@ -781,6 +964,7 @@ function pickRecommend() {
 }
 
 $('ydInfo').onclick = (e) => withBusy(e.currentTarget, '解析中…（首次可能 10~30 秒）', async () => {
+  if (DEMO) { loadDemoData(); toast('演示模式：已加载示例；真实解析需本地运行后端', 'warn'); return; }
   const url = $('ydUrl').value.trim();
   if (!url) { ydMsg('请先粘贴视频链接', 'warn'); return; }
   $('ydFormats').classList.add('hidden');
@@ -896,6 +1080,7 @@ function handleYdEvent(ev, d) {
 }
 
 $('ydRun').onclick = (e) => withBusy(e.currentTarget, '下载中…', async () => {
+  if (DEMO) { loadDemoData(); toast('演示模式：已加载示例；真实下载需本地运行后端', 'warn'); return; }
   const url = $('ydUrl').value.trim();
   if (!url) { ydMsg('请先粘贴视频链接', 'warn'); return; }
   const payload = { url, platform: $('ydPlatform').value };
@@ -955,6 +1140,7 @@ function selectedPlatforms() {
 }
 
 $('runBtn').onclick = (e) => withBusy(e.currentTarget, '采集中…（实时显示结果）', async () => {
+  if (DEMO) { loadDemoData(); toast('演示模式：已加载示例检索结果；真实采集需本地运行后端', 'warn'); return; }
   const body = {
     keywords: $('keywords').value.trim(),
     platforms: selectedPlatforms(),
@@ -1026,6 +1212,11 @@ function handleCollectEvent(ev, d) {
       $('notes').innerHTML = ns.map(n => '• ' + esc(n)).join('<br/>');
       $('notes').classList.remove('hidden');
     }
+  } else if (ev === 'error') {
+    $('collectProgress').classList.add('hidden');
+    $('notes').innerHTML = '⚠ ' + esc(d.message || '采集失败');
+    $('notes').className = 'notice warn';
+    $('notes').classList.remove('hidden');
   }
 }
 
@@ -1183,6 +1374,7 @@ function updateBatchSel() {
 }
 
 $('batchParse').onclick = (e) => withBusy(e.currentTarget, '解析中…（播放列表可能稍慢）', async () => {
+  if (DEMO) { loadDemoData(); toast('演示模式：已加载示例批量清单；真实解析需本地运行后端', 'warn'); return; }
   const raw = $('batchUrls').value.trim();
   if (!raw) { $('batchNotes').innerHTML = '请先粘贴播放列表链接或至少一个视频链接。'; $('batchNotes').classList.remove('hidden'); return; }
   $('batchNotes').classList.add('hidden');
@@ -2011,7 +2203,7 @@ function loadDownloads() {
     setDlView(DL_VIEW);
     DL_INIT = true;
   }
-  if (!DL_ES) {
+  if (!DL_ES && !DEMO) {
     DL_ES = new EventSource('/api/downloads/stream');
     DL_ES.addEventListener('snapshot', (e) => { try { DL_HISTORY = (JSON.parse(e.data).items) || []; } catch (_) {} renderDownloads(); });
     ['meta','batch-start','entry-start','progress','stage','batch-progress','done','batch-done','error','task-update','batch-update','task-stopped']

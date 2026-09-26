@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.log
+
+# 运行时数据目录（Cookie 凭据已由 cookies/.gitignore 单独忽略）
+downloads/
+results/
+coverage/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 打包构建产物
+build/
+dist/
+*.spec
