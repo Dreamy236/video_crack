@@ -357,14 +357,16 @@
             <option value="youtube">YouTube</option>
           </select>
           <label>浏览器登录超时（秒）</label>
-          <input type="number" id="ckTimeout" value="600" min="60" max="900" />
+          <input type="number" id="ckTimeout" value="180" min="60" max="900" />
           <div class="ck-acts" style="margin-top:14px">
             <button class="btn primary" id="ckImport">⇩ 解析并保存</button>
             <button class="btn" id="ckLogin">🖥 浏览器登录获取</button>
+            <button class="btn hidden" id="ckStopAll" style="margin-left:8px">⏹ 停止登录</button>
             <button class="mini" id="ckRefresh">↻ 刷新状态</button>
           </div>
           <button class="btn primary hidden" id="ckCaptureNow" style="margin-top:14px">✅ 我已完成登录，现在抓取 Cookie</button>
           <div id="ckShotWrap" class="hidden" style="margin-top:12px">
+            <button id="ckShotClose" title="关闭窗口并停止登录任务" style="float:right;cursor:pointer;background:transparent;border:none;font-size:16px;color:#999">✕</button>
             <img id="ckLoginShot" alt="登录页（请扫码登录）" style="max-width:100%;max-height:420px;border-radius:8px;border:1px solid rgba(128,128,128,.35)" />
             <div class="muted" style="font-size:12px;margin-top:6px">登录页已在服务器端浏览器打开。请用手机 App 扫码或按页面提示完成登录，成功后将自动检测并保存 Cookie；也可以随时点上方【我已完成登录，现在抓取 Cookie】。</div>
           </div>

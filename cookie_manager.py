@@ -1085,7 +1085,7 @@ def format_self_check(report: dict) -> str:
 LOGIN_STATE: dict = {
     "running": False, "platform": "", "message": "尚未开始", "ok": None,
     "started_at": 0.0, "finished_at": 0.0, "result": None,
-    "capture_now": False, "login_detected": False, "screenshot": None,
+    "capture_now": False, "login_detected": False, "screenshot": None, "stop_requested": False,
 }
 _LOGIN_LOCK = threading.Lock()
 
@@ -1213,7 +1213,7 @@ def capture_login(platform: str = "auto", timeout: int = 240, headless: bool = F
 
     _set_state(running=True, platform=platform, url=url, ok=None, result=None,
                started_at=time.time(), finished_at=0.0, capture_now=False, login_detected=False,
-               message=f"正在启动浏览器，访问 {nav_url} …")
+               stop_requested=False, message=f"正在启动浏览器，访问 {nav_url} …")
 
     try:
         with sync_playwright() as p:
@@ -1234,6 +1234,19 @@ def capture_login(platform: str = "auto", timeout: int = 240, headless: bool = F
             baseline = {c["name"] for c in ctx.cookies() if c.get("name")}
             _set_state(message=f"请在浏览器中登录（扫码或账号密码）。登录成功后会自动抓取 Cookie。剩余 {timeout}s")
             while time.time() < deadline:
+                if LOGIN_STATE.get("stop_requested"):
+                    result = {"ok": False, "error": "已手动停止登录任务"}
+                    _set_state(message="⏹ 已停止登录任务（手动停止）。")
+                    break
+                try:
+                    if page.is_closed():
+                        raise RuntimeError("browser-closed")
+                except RuntimeError:
+                    result = {"ok": False, "error": "浏览器窗口已关闭，登录已取消"}
+                    _set_state(message="⏹ 浏览器窗口已关闭，登录已取消。")
+                    break
+                except Exception:  # noqa: BLE001
+                    pass
                 raw = ctx.cookies()
                 cookies = {c["name"]: c["value"] for c in raw if c.get("name")}
                 cmeta = {
@@ -1313,8 +1326,16 @@ def capture_login(platform: str = "auto", timeout: int = 240, headless: bool = F
         _set_state(message=f"❌ {result['error']}")
 
     _set_state(running=False, ok=bool(result.get("ok")), result=result, finished_at=time.time(),
-               capture_now=False, login_detected=False, screenshot=None)
+               capture_now=False, login_detected=False, screenshot=None, stop_requested=False)
     return result
+
+
+def stop_login() -> dict:
+    """请求停止当前登录任务：浏览器将被关闭，不保存本次 Cookie。"""
+    if not LOGIN_STATE.get("running"):
+        return {"ok": False, "error": "当前没有进行中的登录任务。"}
+    _set_state(stop_requested=True, message="⏹ 正在停止登录任务…")
+    return {"ok": True, "message": "已请求停止登录任务，浏览器即将关闭。"}
 
 
 def start_login_async(platform: str = "auto", timeout: int = 240, headless: bool = False,

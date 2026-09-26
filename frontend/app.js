@@ -608,7 +608,7 @@ async function startLogin(platform, btn, url) {
   }
   cardBusy(platform, true);
   const ok = await withBusy(btn, '启动中', async () => {
-    const payload = { platform, timeout: parseInt($('ckTimeout').value) || 240 };
+    const payload = { platform, timeout: parseInt($('ckTimeout').value) || 180 };
     // 远程/服务器模式：浏览器在服务端无头运行，登录页截图随状态返回供扫码（本地弹窗模式不受影响）
     if (!/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) payload.headless = true;
     if (url) payload.url = url;
@@ -623,6 +623,7 @@ async function startLogin(platform, btn, url) {
 
   $('ckCaptureNow').classList.remove('hidden');
   $('ckCaptureNow').disabled = false;
+  const stopBtn = $('ckStopAll'); if (stopBtn) stopBtn.classList.remove('hidden');
   $('ckCaptureNow').textContent = '✅ 我已完成登录，现在抓取 Cookie';
   detectModalShown = false;
 
@@ -635,6 +636,7 @@ async function startLogin(platform, btn, url) {
     $('ckCaptureNow').classList.add('hidden');
     hideDetectModal();
     const shotEl = $('ckShotWrap'); if (shotEl) shotEl.classList.add('hidden');
+    const stopBtn = $('ckStopAll'); if (stopBtn) stopBtn.classList.add('hidden');
     if (msg) ckNotice(esc(msg), kind || 'warn');
     loadCookies();
   };
@@ -679,6 +681,21 @@ async function doCapture() {
   }
 }
 $('ckCaptureNow').onclick = () => doCapture();
+
+$('ckStopAll').onclick = async () => {
+  try {
+    const d = await postJSON('/api/cookies/login_stop', {});
+    ckNotice(esc((d && d.message) || (d && d.error) || '已请求停止登录'), (d && d.ok) ? 'info' : 'warn');
+  } catch (err) { ckNotice('停止请求异常：' + err.message, 'bad'); }
+  const stb = $('ckStopAll'); if (stb) stb.classList.add('hidden');
+  loadCookies();
+};
+$('ckShotClose').onclick = async () => {
+  try { await postJSON('/api/cookies/login_stop', {}); } catch (err) {}
+  const sw = $('ckShotWrap'); if (sw) sw.classList.add('hidden');
+  const stb = $('ckStopAll'); if (stb) stb.classList.add('hidden');
+  loadCookies();
+};
 
 
 function showDetectModal(plat, count) {

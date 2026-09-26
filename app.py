@@ -4347,6 +4347,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/cookies/login_capture":
                 return self._json(cm.request_capture())
 
+            if path == "/api/cookies/login_stop":
+                return self._json(cm.stop_login())
+
             if path == "/api/cookies/probe":
                 plat = str(body.get("platform", ""))
                 res = cm.probe(plat, STORE)
