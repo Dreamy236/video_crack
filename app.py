@@ -991,6 +991,8 @@ def download_info(body: dict) -> dict:
             _meta = bili_api_meta(_bvid)
             if _meta and _meta.get("title"):
                 _fmts = bili_api_formats(_bvid, _meta.get("cid"))
+                if not _fmts:
+                    _fmts = bili_api_formats(_bvid, _meta.get("cid"), force=True)
                 _video = (_fmts or {}).get("video") or []
                 _audio = (_fmts or {}).get("audio") or []
                 _mu = bili_api_durl(_bvid, _meta.get("cid")) or ""
