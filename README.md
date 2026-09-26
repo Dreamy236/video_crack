@@ -89,6 +89,8 @@ python app.py        # 监听 http://127.0.0.1:8000/（端口占用自动顺延�
 
 详细部署（腾讯云 systemd 服务、GitHub Pages 前后端分离、exe 打包）见 [`deploy/README_tencent.md`](deploy/README_tencent.md)。
 
+**零基础从零上线完整指南**（Git 推送 → GitHub Pages → 腾讯云后端 → Cloudflare 域名）见 [`docs/DEPLOY_GUIDE.md`](docs/DEPLOY_GUIDE.md)。
+
 ---
 
 ## 已知限制与不足
