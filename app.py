@@ -1379,6 +1379,31 @@ def stream_download(self, body: dict) -> None:
 
         threading.Thread(target=_fill_meta, daemon=True).start()
 
+    if route_platform == "bilibili":
+        media_url = (body.get("media_url") or "").strip()
+        if not media_url:
+            _bv = _bili_bvid_of(url)
+            if _bv:
+                _mu = bili_api_durl(_bv)
+                if _mu:
+                    media_url = _mu
+                    _m = bili_api_meta(_bv)
+                    if _m:
+                        if not meta["title"] and _m["title"]: meta["title"] = _m["title"]
+                        if not meta["author"] and _m["author"]: meta["author"] = _m["author"]
+                        if not likes and _m["likes"]: likes = _m["likes"]
+                        if not views and _m["views"]: views = _m["views"]
+                        if not duration and _m["duration"]: duration = _m["duration"]
+                        if not meta["cover"] and _m["pic"]: meta["cover"] = _m["pic"]
+        if media_url:
+            _run_direct_download(emit, url, media_url, "bilibili", cookie_file, cookie_label,
+                                 tag="", task_id=task_id, title=meta["title"], author=meta["author"],
+                                 likes=likes, views=views, duration=duration, cover=meta["cover"],
+                                 vcodec=vcodec, task_key=task_key,
+                                 stop_event=DL_TASKS[task_key]["stop_event"])
+            return
+        emit("error", {"message": "B 站直链获取失败，请稍后重试或检查链接。", "tag": ""})
+        return
     if route_platform in ("kuaishou", "douyin"):
         media_url = (body.get("media_url") or "").strip()
         rv = None
