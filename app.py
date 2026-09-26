@@ -995,7 +995,6 @@ def download_info(body: dict) -> dict:
                     _fmts = bili_api_formats(_bvid, _meta.get("cid"), force=True)
                 _video = (_fmts or {}).get("video") or []
                 _audio = (_fmts or {}).get("audio") or []
-                _mu = bili_api_durl(_bvid, _meta.get("cid")) or ""
                 return {
                     "ok": True, "platform": "bilibili", "cookie": cookie_label,
                     "title": _meta["title"], "duration": _meta["duration"],
@@ -1004,9 +1003,9 @@ def download_info(body: dict) -> dict:
                     "ext": "mp4", "video": _video, "audio": _audio, "muxed": [],
                     "count": len(_video) + len(_audio),
                     "recommend": {}, "ffmpeg": bool(find_ffmpeg()),
-                    "media_url": _mu, "media_unavailable": not _mu and not _video,
+                    "media_url": "", "media_unavailable": not _video and not _audio,
                     "note": ("B 站视频信息已通过官方 API 获取（绕开服务器 IP 风控 412），"
-                             "已列出全部音视频轨。" if (_video or _audio) else
+                             "已列出全部音视频轨，可在下方逐轨精选后下载。" if (_video or _audio) else
                              "已获取视频信息，但直链获取失败，可稍后重试或检查链接。"),
                 }
         if _is_douyin_url(url):
