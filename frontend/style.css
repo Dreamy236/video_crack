@@ -34,7 +34,7 @@
       linear-gradient(160deg, var(--bg), var(--bg2));
     min-height: 100vh; padding: 28px 18px 60px; transition: background .4s, color .3s;
   }
-  .wrap { max-width: 1080px; margin: 0 auto; }
+  .wrap { max-width: min(1600px, 96vw); margin: 0 auto; }
   header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
   .brand { display: flex; align-items: center; gap: 14px; }
   .logo {
@@ -494,7 +494,7 @@
 .browser-tip { font-size: 12px; color: var(--warn); padding: 8px 12px; background: rgba(232,151,58,.08); border-bottom: 1px solid var(--border); line-height: 1.7; }
 .browser-tip b { color: var(--warn); }
 .browser-body { padding: 0; background: #0a0e1a; }
-.browser-body img { display: block; width: 100%; max-height: 560px; object-fit: contain; cursor: crosshair; }
+.browser-body img { display: block; width: 100%; max-height: 680px; object-fit: contain; cursor: crosshair; }
 .browser-footer { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); align-items: center; flex-wrap: wrap; }
 .browser-footer input { flex: 1; min-width: 200px; background: var(--input); color: var(--text); border: 1px solid var(--bd); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; }
 .browser-footer .btn.mini { padding: 7px 12px; }
