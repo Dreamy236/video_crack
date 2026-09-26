@@ -483,3 +483,18 @@
       .dl-detail-body .dd-link { color:var(--accent,#7aa2ff); word-break:break-all; }
       .dl-detail-body .dd-actions { display:flex; gap:8px; flex-wrap:wrap; }
       @media (max-width:560px){ .dl-grid { grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); } }
+
+/* ===== 实时浏览器窗口（登录实时画面） ===== */
+.browser-card { border: 1px solid var(--bd); border-radius: 14px; overflow: hidden; background: var(--surface-solid); box-shadow: var(--shadow); }
+.browser-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: linear-gradient(135deg, rgba(91,108,255,.14), rgba(177,91,255,.14)); border-bottom: 1px solid var(--border); }
+.browser-title { font-weight: 700; font-size: 13px; color: var(--text); white-space: nowrap; }
+.browser-hint { flex: 1; font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser-close { background: transparent; border: none; color: var(--muted); font-size: 15px; cursor: pointer; padding: 2px 8px; border-radius: 6px; line-height: 1; }
+.browser-close:hover { color: var(--bad); background: rgba(229,72,77,.14); }
+.browser-tip { font-size: 12px; color: var(--warn); padding: 8px 12px; background: rgba(232,151,58,.08); border-bottom: 1px solid var(--border); line-height: 1.7; }
+.browser-tip b { color: var(--warn); }
+.browser-body { padding: 0; background: #0a0e1a; }
+.browser-body img { display: block; width: 100%; max-height: 560px; object-fit: contain; cursor: crosshair; }
+.browser-footer { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); align-items: center; flex-wrap: wrap; }
+.browser-footer input { flex: 1; min-width: 200px; background: var(--input); color: var(--text); border: 1px solid var(--bd); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; }
+.browser-footer .btn.mini { padding: 7px 12px; }

@@ -4350,6 +4350,12 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/cookies/login_stop":
                 return self._json(cm.stop_login())
 
+            if path == "/api/cookies/login_click":
+                return self._json(cm.login_click(int(body.get("x", 500)), int(body.get("y", 500))))
+
+            if path == "/api/cookies/login_input":
+                return self._json(cm.login_input(str(body.get("text", "") or "")))
+
             if path == "/api/cookies/probe":
                 plat = str(body.get("platform", ""))
                 res = cm.probe(plat, STORE)

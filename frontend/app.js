@@ -645,7 +645,12 @@ async function startLogin(platform, btn, url) {
       const s = await (await fetch('/api/cookies/login_status')).json();
       const shotEl = $('ckShotWrap'), shotImg = $('ckLoginShot');
       if (shotEl && shotImg) {
-        if (s.running && s.screenshot) { shotImg.src = 'data:image/jpeg;base64,' + s.screenshot; shotEl.classList.remove('hidden'); }
+        if (s.running && s.screenshot) {
+          shotImg.src = 'data:image/jpeg;base64,' + s.screenshot;
+          shotEl.classList.remove('hidden');
+          const PL = { bilibili: 'Bilibili', douyin: '抖音', kuaishou: '快手', weibo: '微博', xiaohongshu: '小红书', youtube: 'YouTube' };
+          const pl = $('ckShotPlat'); if (pl) pl.textContent = PL[s.platform] || s.platform || '';
+        }
         else if (!s.running) shotEl.classList.add('hidden');
       }
       if (s.running) {
@@ -696,6 +701,32 @@ $('ckShotClose').onclick = async () => {
   const stb = $('ckStopAll'); if (stb) stb.classList.add('hidden');
   loadCookies();
 };
+$('ckLoginShot').onclick = async (e) => {
+  const img = e.currentTarget;
+  if (!img.getBoundingClientRect) return;
+  const r = img.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  const x = Math.round((e.clientX - r.left) / r.width * 1000);
+  const y = Math.round((e.clientY - r.top) / r.height * 1000);
+  try {
+    const d = await postJSON('/api/cookies/login_click', { x, y });
+    if (d && !d.ok) ckNotice(esc(d.error || '点击失败'), 'warn');
+  } catch (err) { ckNotice('点击发送失败：' + err.message, 'bad'); }
+};
+async function sendShotInput() {
+  const inp = $('ckShotInput');
+  if (!inp) return;
+  const text = inp.value.trim();
+  if (!text) return;
+  try {
+    const d = await postJSON('/api/cookies/login_input', { text });
+    if (d && !d.ok) { ckNotice(esc(d.error || '发送失败'), 'warn'); return; }
+    inp.value = '';
+    ckNotice('已发送到浏览器：' + esc(text.slice(0, 24)) + (text.length > 24 ? '…' : ''), 'info');
+  } catch (err) { ckNotice('发送失败：' + err.message, 'bad'); }
+}
+const shotSend = $('ckShotSend'); if (shotSend) shotSend.onclick = () => sendShotInput();
+const shotInp = $('ckShotInput'); if (shotInp) shotInp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendShotInput(); } });
 
 
 function showDetectModal(plat, count) {

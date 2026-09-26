@@ -1222,6 +1222,7 @@ def capture_login(platform: str = "auto", timeout: int = 240, headless: bool = F
                 user_agent=DEFAULT_UA, viewport={"width": 1280, "height": 860},
             )
             page = ctx.pages[0] if ctx.pages else ctx.new_page()
+            LOGIN_CTRL["page"] = page
             try:
                 page.goto(nav_url, timeout=45000)
             except Exception:  # noqa: BLE001
@@ -1325,6 +1326,7 @@ def capture_login(platform: str = "auto", timeout: int = 240, headless: bool = F
         result = {"ok": False, "error": f"浏览器登录失败：{e}"}
         _set_state(message=f"❌ {result['error']}")
 
+    LOGIN_CTRL["page"] = None
     _set_state(running=False, ok=bool(result.get("ok")), result=result, finished_at=time.time(),
                capture_now=False, login_detected=False, screenshot=None, stop_requested=False)
     return result
@@ -1336,6 +1338,39 @@ def stop_login() -> dict:
         return {"ok": False, "error": "当前没有进行中的登录任务。"}
     _set_state(stop_requested=True, message="⏹ 正在停止登录任务…")
     return {"ok": True, "message": "已请求停止登录任务，浏览器即将关闭。"}
+
+
+LOGIN_CTRL: dict = {"page": None}
+
+
+def login_click(x: int = 500, y: int = 500) -> dict:
+    """在无头登录实时画面上点击（坐标 0-1000 相对比例），用于聚焦输入框等。"""
+    page = LOGIN_CTRL.get("page")
+    if page is None or not LOGIN_STATE.get("running"):
+        return {"ok": False, "error": "没有进行中的登录任务。"}
+    try:
+        vs = page.viewport_size or {"width": 1280, "height": 860}
+        px = max(0, min(1000, int(x))) / 1000.0 * vs["width"]
+        py = max(0, min(1000, int(y))) / 1000.0 * vs["height"]
+        page.mouse.click(px, py)
+        return {"ok": True, "message": f"已点击画面 ({x}, {y})。"}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"点击失败：{e}"}
+
+
+def login_input(text: str = "") -> dict:
+    """向无头登录浏览器输入文字（发送到当前聚焦元素，如手机号输入框）。"""
+    page = LOGIN_CTRL.get("page")
+    if page is None or not LOGIN_STATE.get("running"):
+        return {"ok": False, "error": "没有进行中的登录任务。"}
+    if not text:
+        return {"ok": False, "error": "请输入要发送的文字。"}
+    try:
+        page.keyboard.type(text)
+        shown = text[:20] + ("…" if len(text) > 20 else "")
+        return {"ok": True, "message": f"已输入：{shown}"}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"输入失败：{e}"}
 
 
 def start_login_async(platform: str = "auto", timeout: int = 240, headless: bool = False,
