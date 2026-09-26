@@ -4341,7 +4341,8 @@ class Handler(BaseHTTPRequestHandler):
 
                 if plat not in PLATFORMS and not url:
                     return self._json({"ok": False, "error": f"不支持的平台：{plat}"}, 400)
-                return self._json(cm.start_login_async(plat, timeout, headless=False, url=url))
+                headless = bool(body.get("headless", False))
+                return self._json(cm.start_login_async(plat, timeout, headless=headless, url=url))
 
             if path == "/api/cookies/login_capture":
                 return self._json(cm.request_capture())

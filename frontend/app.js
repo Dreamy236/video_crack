@@ -609,6 +609,8 @@ async function startLogin(platform, btn, url) {
   cardBusy(platform, true);
   const ok = await withBusy(btn, '启动中', async () => {
     const payload = { platform, timeout: parseInt($('ckTimeout').value) || 240 };
+    // 远程/服务器模式：浏览器在服务端无头运行，登录页截图随状态返回供扫码（本地弹窗模式不受影响）
+    if (!/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) payload.headless = true;
     if (url) payload.url = url;
     const d = await postJSON('/api/cookies/login', payload);
     if (!d.ok) { ckNotice(d.error || '启动失败', 'bad'); return false; }
@@ -632,12 +634,18 @@ async function startLogin(platform, btn, url) {
     cardBusy(platform, false); NP.done();
     $('ckCaptureNow').classList.add('hidden');
     hideDetectModal();
+    const shotEl = $('ckShotWrap'); if (shotEl) shotEl.classList.add('hidden');
     if (msg) ckNotice(esc(msg), kind || 'warn');
     loadCookies();
   };
   loginTimer = setInterval(async () => {
     try {
       const s = await (await fetch('/api/cookies/login_status')).json();
+      const shotEl = $('ckShotWrap'), shotImg = $('ckLoginShot');
+      if (shotEl && shotImg) {
+        if (s.running && s.screenshot) { shotImg.src = 'data:image/jpeg;base64,' + s.screenshot; shotEl.classList.remove('hidden'); }
+        else if (!s.running) shotEl.classList.add('hidden');
+      }
       if (s.running) {
 
         if (s.login_detected) {

@@ -29,6 +29,7 @@ cookies/
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -1082,7 +1083,7 @@ def format_self_check(report: dict) -> str:
 LOGIN_STATE: dict = {
     "running": False, "platform": "", "message": "尚未开始", "ok": None,
     "started_at": 0.0, "finished_at": 0.0, "result": None,
-    "capture_now": False, "login_detected": False,
+    "capture_now": False, "login_detected": False, "screenshot": None,
 }
 _LOGIN_LOCK = threading.Lock()
 
@@ -1098,6 +1099,17 @@ def playwright_available() -> bool:
 def _set_state(**kw) -> None:
     with _LOGIN_LOCK:
         LOGIN_STATE.update(kw)
+
+
+def _update_screenshot(page, ctx) -> None:
+    """无头登录模式：把当前登录页截图（JPEG base64）写入状态，供前端展示（扫码登录）。"""
+    try:
+        if page is None or ctx is None:
+            return
+        buf = page.screenshot(type="jpeg", quality=50)
+        _set_state(screenshot=base64.b64encode(buf).decode("ascii"))
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # 通用「已登录」启发式：不依赖各平台特有 login_keys，登录后通常会出现一组服务端下发的会话型 Cookie。
@@ -1197,6 +1209,8 @@ def capture_login(platform: str = "auto", timeout: int = 240, headless: bool = F
             except Exception:  # noqa: BLE001
                 pass
             time.sleep(1.5)
+            if headless:
+                _update_screenshot(page, ctx)
             baseline = {c["name"] for c in ctx.cookies() if c.get("name")}
             _set_state(message=f"请在浏览器中登录（扫码或账号密码）。登录成功后会自动抓取 Cookie。剩余 {timeout}s")
             while time.time() < deadline:
@@ -1245,6 +1259,8 @@ def capture_login(platform: str = "auto", timeout: int = 240, headless: bool = F
                 else:
                     _set_state(message=f"等待登录中…已捕获 {len(cookies)} 条 Cookie（新增 {len(new_names)}），"
                                    f"剩余 {left}s。登录后点【抓取】或弹窗【确认保存】即可保存。")
+                if headless:
+                    _update_screenshot(page, ctx)
                 page.wait_for_timeout(2000)
             else:
                 # 超时：保存当前 Cookie；若已检测到登录态则按登录态保存，避免误标匿名
@@ -1277,7 +1293,7 @@ def capture_login(platform: str = "auto", timeout: int = 240, headless: bool = F
         _set_state(message=f"❌ {result['error']}")
 
     _set_state(running=False, ok=bool(result.get("ok")), result=result, finished_at=time.time(),
-               capture_now=False, login_detected=False)
+               capture_now=False, login_detected=False, screenshot=None)
     return result
 
 
