@@ -2369,3 +2369,35 @@ function deleteItems(ids) {
 setMode(localStorage.getItem('mode') || 'search');
 loadCookies();
 
+
+// 页面加载后：若已有进行中的登录任务（其他标签页/外部触发/刷新前启动），自动接续轮询并展示实时浏览器窗口
+(async () => {
+  try {
+    const s = await (await fetch('/api/cookies/login_status')).json();
+    if (s && s.running && !loginTimer) {
+      loginTimer = setInterval(async () => {
+        try {
+          const st = await (await fetch('/api/cookies/login_status')).json();
+          const shotEl = ckShotWrap, shotImg = ckLoginShot;
+          if (shotEl && shotImg) {
+            if (st.running && st.screenshot) {
+              shotImg.src = 'data:image/jpeg;base64,' + st.screenshot;
+              shotEl.classList.remove('hidden');
+              const PL = { bilibili: 'Bilibili', douyin: '抖音', kuaishou: '快手', weibo: '微博', xiaohongshu: '小红书', youtube: 'YouTube' };
+              const pl = ckShotPlat; if (pl) pl.textContent = PL[st.platform] || st.platform || '';
+            } else if (!st.running) {
+              shotEl.classList.add('hidden');
+            }
+          }
+          const stb = ckStopAll;
+          if (stb) { if (st.running) stb.classList.remove('hidden'); else stb.classList.add('hidden'); }
+          if (!st.running) {
+            clearInterval(loginTimer); loginTimer = null;
+            const cap = ckCaptureNow; if (cap) cap.classList.add('hidden');
+            loadCookies();
+          }
+        } catch (e) { clearInterval(loginTimer); loginTimer = null; }
+      }, 1500);
+    }
+  } catch (e) { /* 非后端环境（如 GitHub Pages 演示模式）无需轮询 */ }
+})();
