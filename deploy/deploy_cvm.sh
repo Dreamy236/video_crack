@@ -24,8 +24,11 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y python3 python3-venv python3-pip ffmpeg git curl ca-certificates gnupg || die "apt 安装失败"
 
-log "2/6 拉取项目代码 -> $APP_DIR"
-if [ -d "$APP_DIR/.git" ]; then
+log "2/6 准备项目代码 -> $APP_DIR"
+if [ "${SKIP_CLONE:-0}" = "1" ]; then
+  log "SKIP_CLONE=1：使用已上传到 $APP_DIR 的代码（本机 scp 上传场景）"
+  [ -f "$APP_DIR/app.py" ] || die "$APP_DIR/app.py 不存在，请先上传代码"
+elif [ -d "$APP_DIR/.git" ]; then
   git -C "$APP_DIR" pull --ff-only || log "pull 失败，继续使用现有代码"
 else
   git clone --depth 1 "$REPO_URL" "$APP_DIR" || die "git clone 失败"
