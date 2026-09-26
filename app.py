@@ -1,4 +1,5 @@
 from __future__ import annotations
+import tempfile
 
 
 def _relaunch_under_playwright_python():
@@ -4722,7 +4723,16 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": False, "error": f"bad json: {e}"}, 400)
 
         if path == "/api/download":
-            return stream_download(self, body)
+            try:
+                return stream_download(self, body)
+            except Exception as _e:
+                import traceback as _tb
+                _tb.print_exc()
+                try:
+                    _sse_emit(self, "error", {"message": f"下载任务异常：{_e}"})
+                except Exception:
+                    pass
+                return
         if path == "/api/batch/download":
             return stream_batch_download(self, body)
 
