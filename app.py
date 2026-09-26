@@ -990,17 +990,21 @@ def download_info(body: dict) -> dict:
         if _bvid:
             _meta = bili_api_meta(_bvid)
             if _meta and _meta.get("title"):
-                _mu = bili_api_durl(_bvid, _meta.get("cid"))
+                _fmts = bili_api_formats(_bvid, _meta.get("cid"))
+                _video = (_fmts or {}).get("video") or []
+                _audio = (_fmts or {}).get("audio") or []
+                _mu = bili_api_durl(_bvid, _meta.get("cid")) or ""
                 return {
                     "ok": True, "platform": "bilibili", "cookie": cookie_label,
                     "title": _meta["title"], "duration": _meta["duration"],
                     "thumbnail": _meta["pic"], "webpage_url": url,
                     "uploader": _meta["author"], "extractor": "BiliBili",
-                    "ext": "mp4", "video": [], "audio": [], "muxed": [], "count": 1,
-                    "recommend": {}, "ffmpeg": bool(ffmpeg_dir),
-                    "media_url": _mu or "", "media_unavailable": not _mu,
-                    "note": ("B 站视频信息已通过官方 API 获取（绕开服务器 IP 风控 412）。"
-                             "点击「开始下载」即直连保存。" if _mu else
+                    "ext": "mp4", "video": _video, "audio": _audio, "muxed": [],
+                    "count": len(_video) + len(_audio),
+                    "recommend": {}, "ffmpeg": bool(find_ffmpeg()),
+                    "media_url": _mu, "media_unavailable": not _mu and not _video,
+                    "note": ("B 站视频信息已通过官方 API 获取（绕开服务器 IP 风控 412），"
+                             "已列出全部音视频轨。" if (_video or _audio) else
                              "已获取视频信息，但直链获取失败，可稍后重试或检查链接。"),
                 }
         if _is_douyin_url(url):
@@ -1380,9 +1384,25 @@ def stream_download(self, body: dict) -> None:
         threading.Thread(target=_fill_meta, daemon=True).start()
 
     if route_platform == "bilibili":
+        _fmt_id = (body.get("format_id") or "").strip()
+        _bv = _bili_bvid_of(url)
+        if _fmt_id and _bv:
+            _cid = None
+            _m0 = bili_api_meta(_bv)
+            if _m0:
+                _cid = _m0.get("cid")
+            v_url, a_url = _bili_fmt_url(_bv, _cid, _fmt_id)
+            if v_url:
+                _run_bili_tracks_download(emit, url, v_url, a_url, "bilibili",
+                                          cookie_file, cookie_label, tag="", task_id=task_id,
+                                          title=meta["title"], author=meta["author"],
+                                          likes=likes, views=views, duration=duration,
+                                          cover=meta["cover"], task_key=task_key,
+                                          stop_event=DL_TASKS[task_key]["stop_event"],
+                                          vcodec=vcodec)
+                return
         media_url = (body.get("media_url") or "").strip()
         if not media_url:
-            _bv = _bili_bvid_of(url)
             if _bv:
                 _mu = bili_api_durl(_bv)
                 if _mu:
@@ -2448,6 +2468,95 @@ def _run_direct_download(emit, url, media_url, platform, cookie_file, cookie_lab
     if task_key: _dl_set_status(task_key, "done")
 
 
+def _run_bili_tracks_download(emit, url, v_url, a_url, platform, cookie_file, cookie_label,
+                         tag="", task_id="", title="", author="", likes=0, views=0,
+                         duration=0, cover="", task_key="", stop_event=None, vcodec=""):
+    """B 站 DASH 分轨下载：视频轨(+音频轨)下载后 ffmpeg 合并，绕开 yt-dlp 412。"""
+    if not v_url:
+        emit("error", {"message": "缺少视频轨直链。", "tag": tag})
+        return
+    if task_key:
+        if stop_event and stop_event.is_set():
+            _dl_set_status(task_key, "stopped")
+            return
+        _dl_set_status(task_key, "downloading")
+    emit("meta", {"title": title or url, "platform": platform, "cookie": cookie_label,
+                  "yt_dlp": "-", "ffmpeg": bool(find_ffmpeg()), "format": "DASH分轨",
+                  "merge": bool(a_url), "container": "mp4", "tag": tag, "cover": cover or ""})
+    _mm = re.search(r"video/(\d+)", url)
+    nid = _mm.group(1) if _mm else platform
+    title_final = (title or "").strip() or nid
+    author_final = (author or "").strip()
+    fname = _final_name(title_final, author_final, duration, "mp4")
+    out_path = _unique_path(fname)
+    header = netscape_to_header(cookie_file)
+    referer = "https://www.bilibili.com/"
+    tmpdir = tempfile.mkdtemp(prefix="bili_")
+    v_tmp = os.path.join(tmpdir, "video.mp4")
+    a_tmp = os.path.join(tmpdir, "audio.m4a") if a_url else ""
+    size = 0
+    try:
+        def prog(done, total):
+            pct = (done / total * 100) if total else 0
+            emit("progress", {"percent": f"{pct:.1f}%", "done": done, "total": total,
+                              "speed": "", "eta": "", "tag": tag})
+
+        size = download_url_to_file(v_url, v_tmp, header, referer=referer, emit_progress=prog)
+        if a_url:
+            download_url_to_file(a_url, a_tmp, header, referer=referer)
+            ff = find_ffmpeg()
+            if not ff:
+                import shutil as _sh
+                _sh.copyfile(v_tmp, out_path)
+            else:
+                ffmpeg = os.path.join(ff, "ffmpeg.exe") if os.path.isfile(os.path.join(ff, "ffmpeg.exe")) else os.path.join(ff, "ffmpeg")
+                cmd = [ffmpeg, "-y", "-i", v_tmp, "-i", a_tmp, "-c", "copy",
+                       "-movflags", "+faststart", out_path]
+                p = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+                if p.returncode != 0:
+                    cmd2 = [ffmpeg, "-y", "-i", v_tmp, "-i", a_tmp,
+                            "-c:v", "copy", "-c:a", "aac", "-movflags", "+faststart", out_path]
+                    p2 = subprocess.run(cmd2, capture_output=True, text=True, timeout=900)
+                    if p2.returncode != 0:
+                        raise RuntimeError("ffmpeg 合并失败: " + (p2.stderr or "")[-200:])
+        else:
+            import shutil as _sh
+            _sh.copyfile(v_tmp, out_path)
+        if not os.path.isfile(out_path):
+            raise RuntimeError("输出文件未生成")
+    except Exception as e:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        emit("error", {"message": f"分轨下载失败：{e}", "tag": tag})
+        if task_key:
+            _dl_set_status(task_key, "error")
+        return
+    shutil.rmtree(tmpdir, ignore_errors=True)
+    _fname = os.path.basename(out_path)
+    cover_file = ""
+    if cover and str(cover).startswith("http"):
+        _cb = os.path.splitext(out_path)[0] + ".jpg"
+        try:
+            download_url_to_file(cover, _cb, header, referer=referer)
+        except Exception:
+            pass
+        cover_file = _save_cover(src_local=_cb, cover_url=cover, title=title_final,
+                                 author=author_final, referer=referer)
+    if vcodec and os.path.isfile(out_path):
+        out_path = _maybe_transcode(out_path, vcodec, emit, tag)
+        _fname = os.path.basename(out_path)
+    _record_history({
+        "task_id": task_id, "platform": platform, "url": url, "title": title_final.strip(),
+        "author": author_final, "likes": int(likes or 0), "views": int(views or 0),
+        "duration": int(duration or 0), "cover": cover, "cover_file": cover_file,
+        "filename": _fname, "path": out_path, "size": size, "status": "done", "progress": 100,
+        "finished_at": datetime.now().isoformat(timespec="seconds"),
+    })
+    emit("done", {"filename": _fname, "path": out_path, "size": size,
+                  "format": "DASH分轨", "skipped": False, "tag": tag, "cover": cover or ""})
+    if task_key:
+        _dl_set_status(task_key, "done")
+
+
 def _xhs_items_from_resolved(resolved: list[dict]) -> tuple[list, list]:
     items: list[dict] = []
     notes: list[str] = []
@@ -2577,6 +2686,104 @@ def bili_api_durl(bvid: str, cid=None, qn: int = 64) -> str | None:
         return None
     except Exception:  # noqa: BLE001
         return None
+
+
+def bili_api_formats(bvid: str, cid=None, force=False) -> dict | None:
+    """B 站 DASH 全轨格式枚举（playurl fnval=4048）：返回 video/audio 全部轨道（含直链）。
+    数据中心 IP 可直连，绕开视频页 412 风控。"""
+    if not bvid:
+        return None
+    key = (bvid, cid or 0)
+    if not force and key in _BILI_FMT_CACHE:
+        return _BILI_FMT_CACHE[key]
+    try:
+        import urllib.request as _ureq
+        if not cid:
+            _m = bili_api_meta(bvid)
+            if not _m or not _m.get("cid"):
+                return None
+            cid = _m["cid"]
+        api = ("https://api.bilibili.com/x/player/playurl?bvid=%s&cid=%s&qn=127&fnval=4048&fourk=1"
+               % (bvid, cid))
+        req = _ureq.Request(api, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://www.bilibili.com",
+        })
+        with _ureq.urlopen(req, timeout=20) as resp:
+            txt = resp.read().decode("utf-8", "replace")
+        d = json.loads(txt)
+        if d.get("code") not in (0, None):
+            return None
+        data = d.get("data") or {}
+        dash = data.get("dash") or {}
+        codec_map = {1: "AVC", 12: "HEVC", 13: "AV1"}
+        video, audio = [], []
+        for v in dash.get("video") or []:
+            h = int(v.get("height") or 0)
+            fid = v.get("id")
+            if not h or not fid:
+                continue
+            u = (v.get("baseUrl") or v.get("base_url") or "").strip()
+            if not u:
+                continue
+            video.append({
+                "format_id": str(fid), "height": h,
+                "width": int(v.get("width") or 0),
+                "fps": v.get("frame_rate") or 0,
+                "codec": codec_map.get(v.get("codecid"), "AVC"),
+                "tbr": int((v.get("bandwidth") or 0) / 1000),
+                "filesize": int(v.get("size") or 0),
+                "url": u, "note": "B站DASH",
+            })
+        for a in dash.get("audio") or []:
+            fid = a.get("id")
+            if not fid:
+                continue
+            u = (a.get("baseUrl") or a.get("base_url") or "").strip()
+            if not u:
+                continue
+            abr = int((a.get("bandwidth") or 0) / 1000)
+            audio.append({
+                "format_id": str(fid), "abr": abr,
+                "asr": int(a.get("sampling_rate") or 0),
+                "codec": "AAC", "filesize": int(a.get("size") or 0),
+                "url": u, "note": f"{abr}kbps",
+            })
+        seen_h: set = set()
+        uniq_v = []
+        for v in sorted(video, key=lambda x: (x["height"], -x["tbr"]), reverse=True):
+            if v["height"] in seen_h:
+                continue
+            seen_h.add(v["height"])
+            uniq_v.append(v)
+        audio.sort(key=lambda x: -x["abr"])
+        if not uniq_v and not audio:
+            return None
+        result = {"video": uniq_v, "audio": audio}
+        _BILI_FMT_CACHE[key] = result
+        return result
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _bili_fmt_url(bvid, cid, fmt_id):
+    """按 format_id 找直链；fmt_id 形如 '80' 或 '80+30280'。"""
+    if not fmt_id:
+        return None, None
+    fmts = bili_api_formats(bvid, cid)
+    if not fmts:
+        return None, None
+    v_id = a_id = None
+    if "+" in fmt_id:
+        v_id, a_id = fmt_id.split("+", 1)
+    else:
+        v_id = fmt_id
+    v_url = next((x["url"] for x in fmts["video"] if x["format_id"] == v_id), "") if v_id else ""
+    a_url = next((x["url"] for x in fmts["audio"] if x["format_id"] == a_id), "") if a_id else ""
+    return (v_url or None), (a_url or None)
+
+
+_BILI_FMT_CACHE: dict = {}
 
 
 def _bili_collection_of(bvid: str):
