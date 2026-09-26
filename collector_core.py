@@ -540,9 +540,15 @@ def resolve_xhs_media_url(note_url: str, profile_root: str = "", cookie_file: st
 
 
 def download_url_to_file(url: str, out_path: str, cookie_header: str = "", referer: str = "",
-                         emit_progress=None, timeout: int = 60) -> int:
-    """用标准库直连下载文件（适用于小红书 CDN 直链）。返回下载字节数。"""
+                         emit_progress=None, timeout: int = 60,
+                         idle_timeout: float = 45, max_seconds: float = 1800) -> int:
+    """用标准库直连下载文件（适用于小红书 CDN 直链）。返回下载字节数。
+
+    idle_timeout: 连续多少秒无数据视为卡死并报错（默认 45s）；
+    max_seconds: 整个下载总时长上限（默认 30 分钟）。
+    """
     import ssl
+    import time as _time
     import urllib.request
     req = urllib.request.Request(url, headers={
         "User-Agent": DEFAULT_UA,
@@ -553,15 +559,22 @@ def download_url_to_file(url: str, out_path: str, cookie_header: str = "", refer
     ctx = ssl.create_default_context()
     total = 0
     done = 0
+    _t0 = _time.monotonic()
+    _last = _t0
     with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
         total = int(r.headers.get("Content-Length", 0) or 0)
         with open(out_path, "wb") as f:
             while True:
+                if _time.monotonic() - _last > idle_timeout:
+                    raise TimeoutError(f"下载空闲超时（{idle_timeout:g}s 内无数据，直链可能已过期）")
+                if _time.monotonic() - _t0 > max_seconds:
+                    raise TimeoutError(f"下载超过总时长上限（{max_seconds:g}s）")
                 chunk = r.read(256 * 1024)
                 if not chunk:
                     break
                 f.write(chunk)
                 done += len(chunk)
+                _last = _time.monotonic()
                 if emit_progress and total:
                     emit_progress(done, total)
     return done

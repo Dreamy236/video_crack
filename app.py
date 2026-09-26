@@ -1392,16 +1392,26 @@ def stream_download(self, body: dict) -> None:
             _m0 = bili_api_meta(_bv)
             if _m0:
                 _cid = _m0.get("cid")
-            v_url, a_url = _bili_fmt_url(_bv, _cid, _fmt_id)
+            v_url, a_url = _bili_fmt_url(_bv, _cid, _fmt_id, force=True)
             if v_url:
-                _run_bili_tracks_download(emit, url, v_url, a_url, "bilibili",
-                                          cookie_file, cookie_label, tag="", task_id=task_id,
-                                          title=meta["title"], author=meta["author"],
-                                          likes=likes, views=views, duration=duration,
-                                          cover=meta["cover"], task_key=task_key,
-                                          stop_event=DL_TASKS[task_key]["stop_event"],
-                                          vcodec=vcodec)
-                return
+                _ok = _run_bili_tracks_download(emit, url, v_url, a_url, "bilibili",
+                                                cookie_file, cookie_label, tag="", task_id=task_id,
+                                                title=meta["title"], author=meta["author"],
+                                                likes=likes, views=views, duration=duration,
+                                                cover=meta["cover"], task_key=task_key,
+                                                stop_event=DL_TASKS[task_key]["stop_event"],
+                                                vcodec=vcodec)
+                if _ok:
+                    return
+                _mu2 = bili_api_durl(_bv)
+                if _mu2:
+                    emit("error", {"message": "分轨下载失败（直链可能已过期），已降级为原画直连下载。", "tag": ""})
+                    _run_direct_download(emit, url, _mu2, "bilibili", cookie_file, cookie_label,
+                                         tag="", task_id=task_id, title=meta["title"], author=meta["author"],
+                                         likes=likes, views=views, duration=duration, cover=meta["cover"],
+                                         vcodec=vcodec, task_key=task_key,
+                                         stop_event=DL_TASKS[task_key]["stop_event"])
+                    return
         media_url = (body.get("media_url") or "").strip()
         if not media_url:
             if _bv:
@@ -2475,11 +2485,11 @@ def _run_bili_tracks_download(emit, url, v_url, a_url, platform, cookie_file, co
     """B 站 DASH 分轨下载：视频轨(+音频轨)下载后 ffmpeg 合并，绕开 yt-dlp 412。"""
     if not v_url:
         emit("error", {"message": "缺少视频轨直链。", "tag": tag})
-        return
+        return False
     if task_key:
         if stop_event and stop_event.is_set():
             _dl_set_status(task_key, "stopped")
-            return
+            return False
         _dl_set_status(task_key, "downloading")
     emit("meta", {"title": title or url, "platform": platform, "cookie": cookie_label,
                   "yt_dlp": "-", "ffmpeg": bool(find_ffmpeg()), "format": "DASH分轨",
@@ -2527,10 +2537,10 @@ def _run_bili_tracks_download(emit, url, v_url, a_url, platform, cookie_file, co
             raise RuntimeError("输出文件未生成")
     except Exception as e:
         shutil.rmtree(tmpdir, ignore_errors=True)
-        emit("error", {"message": f"分轨下载失败：{e}", "tag": tag})
+        print(f"[bili-tracks] 分轨下载失败：{e}")
         if task_key:
             _dl_set_status(task_key, "error")
-        return
+        return False
     shutil.rmtree(tmpdir, ignore_errors=True)
     _fname = os.path.basename(out_path)
     cover_file = ""
@@ -2556,6 +2566,7 @@ def _run_bili_tracks_download(emit, url, v_url, a_url, platform, cookie_file, co
                   "format": "DASH分轨", "skipped": False, "tag": tag, "cover": cover or ""})
     if task_key:
         _dl_set_status(task_key, "done")
+    return True
 
 
 def _xhs_items_from_resolved(resolved: list[dict]) -> tuple[list, list]:
@@ -2767,11 +2778,11 @@ def bili_api_formats(bvid: str, cid=None, force=False) -> dict | None:
         return None
 
 
-def _bili_fmt_url(bvid, cid, fmt_id):
-    """按 format_id 找直链；fmt_id 形如 '80' 或 '80+30280'。"""
+def _bili_fmt_url(bvid, cid, fmt_id, force=False):
+    """按 format_id 找直链；fmt_id 形如 '80' 或 '80+30280'。force=True 强制重新获取直链（防过期）。"""
     if not fmt_id:
         return None, None
-    fmts = bili_api_formats(bvid, cid)
+    fmts = bili_api_formats(bvid, cid, force=force)
     if not fmts:
         return None, None
     v_id = a_id = None
