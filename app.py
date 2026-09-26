@@ -272,6 +272,37 @@ def run_one_task(self, task_id, task_key):
                           title=meta["title"], author=meta["author"], likes=meta["likes"],
                           views=meta["views"], duration=meta["duration"],
                           task_key=task_key, stop_event=stop_event)
+    elif route_platform == "bilibili":
+        media_url = (e.get("media_url") or "").strip()
+        if not media_url:
+            _bv = _bili_bvid_of(url)
+            if _bv:
+                _mu = bili_api_durl(_bv)
+                if _mu:
+                    media_url = _mu
+                    _m = bili_api_meta(_bv)
+                    if _m:
+                        if not meta["title"] and _m["title"]: meta["title"] = _m["title"]
+                        if not meta["author"] and _m["author"]: meta["author"] = _m["author"]
+                        if not meta["likes"] and _m["likes"]: meta["likes"] = _m["likes"]
+                        if not meta["views"] and _m["views"]: meta["views"] = _m["views"]
+                        if not meta["duration"] and _m["duration"]: meta["duration"] = _m["duration"]
+                        if not cover and _m["pic"]: cover = _m["pic"]
+        if media_url:
+            _run_direct_download(emit, url, media_url, "bilibili", cookie_file, cookie_label,
+                                 tag=str(idx), task_id=task_id, title=meta["title"],
+                                 author=meta["author"], likes=meta["likes"], views=meta["views"],
+                                 duration=meta["duration"], cover=cover, vcodec=vcodec,
+                                 task_key=task_key, stop_event=stop_event)
+        else:
+            _run_single_download(emit, url, "bilibili", cookie_file, cookie_label,
+                                 fmt, container, audio_only, tag=str(idx),
+                                 task_id=task_id, title=meta["title"], author=meta["author"],
+                                 likes=meta["likes"], cover=cover,
+                                 views=meta["views"], duration=meta["duration"],
+                                 delogo=bool((body or {}).get("bilibili_delogo")),
+                                 playlist=bool(e.get("is_playlist")), vcodec=vcodec,
+                                 height_cap=height_cap, task_key=task_key, stop_event=stop_event)
     elif route_platform in ("kuaishou", "douyin"):
         media_url = (e.get("media_url") or "").strip()
         rv = None
@@ -955,6 +986,23 @@ def download_info(body: dict) -> dict:
             return {"ok": False, "error": f"yt-dlp 执行失败：{e}"}
     if out.returncode != 0:
 
+        _bvid = _bili_bvid_of(url) if (("bilibili.com" in url) or ("b23.tv" in url) or platform == "bilibili") else None
+        if _bvid:
+            _meta = bili_api_meta(_bvid)
+            if _meta and _meta.get("title"):
+                _mu = bili_api_durl(_bvid, _meta.get("cid"))
+                return {
+                    "ok": True, "platform": "bilibili", "cookie": cookie_label,
+                    "title": _meta["title"], "duration": _meta["duration"],
+                    "thumbnail": _meta["pic"], "webpage_url": url,
+                    "uploader": _meta["author"], "extractor": "BiliBili",
+                    "ext": "mp4", "video": [], "audio": [], "muxed": [], "count": 1,
+                    "recommend": {}, "ffmpeg": bool(ffmpeg_dir),
+                    "media_url": _mu or "", "media_unavailable": not _mu,
+                    "note": ("B 站视频信息已通过官方 API 获取（绕开服务器 IP 风控 412）。"
+                             "点击「开始下载」即直连保存。" if _mu else
+                             "已获取视频信息，但直链获取失败，可稍后重试或检查链接。"),
+                }
         if _is_douyin_url(url):
             _rv = _resolve_media_via_browser("douyin", url, cookie_file, cm.PROFILE_DIR)
             _mu = (_rv.media_url or "") if _rv else ""
@@ -1189,6 +1237,14 @@ def extract_links_info(urls: list, cookie_file: str | None = None) -> tuple[list
 
 
 def _ytdlp_info_one(url: str, cookie_file: str | None = None) -> dict | None:
+    if ("bilibili.com" in url) or ("b23.tv" in url):
+        _bv = _bili_bvid_of(url)
+        if _bv:
+            _m = bili_api_meta(_bv)
+            if _m and _m.get("title"):
+                return {"title": _m["title"], "author": _m["author"],
+                        "duration": _m["duration"], "likes": _m["likes"],
+                        "views": _m["views"]}
     cmd, _ = resolve_ytdlp_cmd()
     if not cmd:
         return None
@@ -2328,7 +2384,8 @@ def _run_direct_download(emit, url, media_url, platform, cookie_file, cookie_lab
     fname = _final_name(title_final, author_final, duration, ext)
     out_path = _unique_path(fname)
     header = netscape_to_header(cookie_file)
-    referer = {"kuaishou": "https://www.kuaishou.com/", "douyin": "https://www.douyin.com/"}.get(platform, url)
+    referer = {"kuaishou": "https://www.kuaishou.com/", "douyin": "https://www.douyin.com/",
+               "bilibili": "https://www.bilibili.com/"}.get(platform, url)
     try:
         def prog(done, total):
             pct = (done / total * 100) if total else 0
@@ -2425,6 +2482,76 @@ def _bili_playlist_type(url: str) -> dict:
         return {"is_playlist": False, "playlist_type": "单视频", "playlist_id": "", "url": s,
                 "maybe_multipart": bool(q.get("p"))}
     return {"is_playlist": False, "playlist_type": "", "playlist_id": "", "url": s}
+
+
+def _bili_bvid_of(url: str) -> str | None:
+    m = re.search(r"(BV[0-9A-Za-z]+)", url, re.I)
+    return m.group(1) if m else None
+
+
+def bili_api_meta(bvid: str) -> dict | None:
+    """B 站视频元数据 API（数据中心 IP 可直连，绕开 412 风控）。"""
+    if not bvid:
+        return None
+    try:
+        import urllib.request as _ureq
+        api = "https://api.bilibili.com/x/web-interface/view?bvid=" + bvid
+        req = _ureq.Request(api, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://www.bilibili.com",
+        })
+        with _ureq.urlopen(req, timeout=15) as resp:
+            txt = resp.read().decode("utf-8", "replace")
+        d = json.loads(txt)
+        if d.get("code") not in (0, None):
+            return None
+        data = d.get("data") or {}
+        owner = data.get("owner") or {}
+        stat = data.get("stat") or {}
+        return {
+            "bvid": bvid, "aid": data.get("aid"), "cid": data.get("cid"),
+            "title": data.get("title") or "", "author": owner.get("name") or "",
+            "duration": int(data.get("duration") or 0),
+            "views": int(stat.get("view") or 0), "likes": int(stat.get("like") or 0),
+            "pic": data.get("pic") or "",
+        }
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def bili_api_durl(bvid: str, cid=None, qn: int = 64) -> str | None:
+    """B 站视频直链 API（playurl，单文件 flv/mp4），数据中心 IP 可直连。"""
+    if not bvid:
+        return None
+    try:
+        import urllib.request as _ureq
+        if not cid:
+            _m = bili_api_meta(bvid)
+            if not _m or not _m.get("cid"):
+                return None
+            cid = _m["cid"]
+        api = ("https://api.bilibili.com/x/player/playurl?bvid=%s&cid=%s&qn=%d&fnval=1&fourk=1"
+               % (bvid, cid, int(qn)))
+        req = _ureq.Request(api, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://www.bilibili.com",
+        })
+        with _ureq.urlopen(req, timeout=15) as resp:
+            txt = resp.read().decode("utf-8", "replace")
+        d = json.loads(txt)
+        if d.get("code") not in (0, None):
+            return None
+        data = d.get("data") or {}
+        durl = data.get("durl") or []
+        if durl:
+            return (durl[0].get("url") or "").strip() or None
+        dash = data.get("dash") or {}
+        vids = dash.get("video") or []
+        if vids:
+            return (vids[0].get("baseUrl") or vids[0].get("base_url") or "").strip() or None
+        return None
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _bili_collection_of(bvid: str):
@@ -2588,6 +2715,20 @@ def batch_info(urls, platform="", expand_playlist=True):
                 })
                 notes.append("抖音视频将在下载阶段通过浏览器通道逐条解析并保存。")
             else:
+                _bv = _bili_bvid_of(u) if is_bili else None
+                if _bv:
+                    _m = bili_api_meta(_bv)
+                    if _m and _m.get("title"):
+                        _mu = bili_api_durl(_bv, _m.get("cid"))
+                        items.append({
+                            "id": _bv, "title": _m["title"], "url": u,
+                            "thumbnail": _m["pic"], "duration": _m["duration"],
+                            "uploader": _m["author"], "extractor": "BiliBili",
+                            "platform": "bilibili", "views": _m["views"], "likes": _m["likes"],
+                            "media_url": _mu or "", "meta_source": "bilibili_api",
+                        })
+                        notes.append("B 站视频信息已通过官方 API 获取（绕开服务器 IP 风控）。")
+                        continue
                 notes.append(f"无法解析（{err or '未知错误'}）：{u}")
             continue
         try:
