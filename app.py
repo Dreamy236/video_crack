@@ -2934,19 +2934,37 @@ def batch_info(urls, platform="", expand_playlist=True):
         if out is None or out.returncode != 0:
             err = (last_err or "未知错误")[:220]
             if _is_douyin_url(u):
-
                 _m = re.search(r"video/(\d+)", u)
-                items.append({
-                    "id": (_m.group(1) if _m else u),
-                    "title": "(抖音视频·下载时解析)",
-                    "url": u, "thumbnail": "", "duration": 0,
-                    "uploader": "", "extractor": "Douyin", "platform": "douyin",
-                    "views": 0, "likes": 0,
-                    "media_url": "",
-                    "media_unavailable": False,
-                    "meta_source": "douyin_browser_pending",
-                })
-                notes.append("抖音视频将在下载阶段通过浏览器通道逐条解析并保存。")
+                _rv = None
+                try:
+                    _rv = _resolve_media_via_browser("douyin", u, cookie_file, cm.PROFILE_DIR)
+                except Exception:
+                    _rv = None
+                if _rv and (_rv.media_url or "").strip():
+                    items.append({
+                        "id": (_m.group(1) if _m else u),
+                        "title": _rv.title or "(抖音视频)",
+                        "url": u, "thumbnail": _rv.cover or "",
+                        "duration": int(_rv.duration or 0),
+                        "uploader": _rv.author or "", "extractor": "Douyin",
+                        "platform": "douyin", "views": 0, "likes": 0,
+                        "media_url": (_rv.media_url or "").strip(),
+                        "media_unavailable": False,
+                        "meta_source": "douyin_browser",
+                    })
+                    notes.append("抖音视频已通过浏览器通道解析（标题/封面/直链已获取）。")
+                else:
+                    items.append({
+                        "id": (_m.group(1) if _m else u),
+                        "title": "(抖音视频·下载时解析)",
+                        "url": u, "thumbnail": "", "duration": 0,
+                        "uploader": "", "extractor": "Douyin", "platform": "douyin",
+                        "views": 0, "likes": 0,
+                        "media_url": "",
+                        "media_unavailable": False,
+                        "meta_source": "douyin_browser_pending",
+                    })
+                    notes.append("抖音视频解析失败，将在下载阶段通过浏览器通道重试。")
             else:
                 _bv = _bili_bvid_of(u) if is_bili else None
                 if _bv:
