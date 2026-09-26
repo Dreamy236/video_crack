@@ -1338,19 +1338,43 @@ $('dlCsv').onclick = () => {
   download('links.csv', head + rows, 'text/csv;charset=utf-8');
 };
 $('copyMd').onclick = async () => {
-  try { await navigator.clipboard.writeText(MD); $('copyMd').textContent = '✓ 已复制'; setTimeout(()=>$('copyMd').textContent='⧉ 复制 MD', 1500); }
-  catch { alert('复制失败，请手动选择文本复制'); }
+  if (await safeCopy(MD)) { $('copyMd').textContent = '✓ 已复制'; setTimeout(()=>$('copyMd').textContent='⧉ 复制 MD', 1500); }
+  else { alert('复制失败（浏览器限制 HTTP 页面访问剪贴板），请手动选择文本复制'); }
 };
 
 
+// HTTP 站点（非安全上下文）下 navigator.clipboard 不可用，回退到 execCommand 传统方案
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+  document.body.appendChild(ta);
+  ta.focus(); ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  document.body.removeChild(ta);
+  return ok;
+}
+function safeCopy(text) {
+  return new Promise(resolve => {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(() => resolve(true)).catch(() => resolve(fallbackCopy(text)));
+    } else {
+      resolve(fallbackCopy(text));
+    }
+  });
+}
+
 async function copyText(text, btn) {
   if (!text) { toast('没有可复制的链接', 'warn'); return; }
-  try {
-    await navigator.clipboard.writeText(text);
+  const ok = await safeCopy(text);
+  if (ok) {
     const n = text.split('\n').filter(Boolean).length;
     if (btn) { const old = btn.textContent; btn.textContent = '✓ 已复制'; setTimeout(() => btn.textContent = old, 1500); }
     else toast('已复制 ' + n + ' 条链接');
-  } catch { alert('复制失败，请手动选择文本复制'); }
+  } else {
+    alert('复制失败（浏览器限制 HTTP 页面访问剪贴板），请手动选择文本复制');
+  }
 }
 
 $('dlTxt').onclick = () => download('links.txt', ALL.map(i => i.url).join('\n'), 'text/plain;charset=utf-8');
@@ -2250,7 +2274,7 @@ function loadDownloads() {
       if (e.target === $('dlDetail')) { $('dlDetail').classList.add('hidden'); return; }
       const btn = e.target.closest('[data-action]'); if (!btn) return;
       const a = btn.dataset.action;
-      if (a === 'copy-text') navigator.clipboard.writeText(btn.dataset.text).then(() => toast('已复制'));
+      if (a === 'copy-text') safeCopy(btn.dataset.text).then(ok => { if (ok) toast('已复制'); else alert('复制失败，请手动选择文本复制'); });
       else if (a === 'saveone') nativeDownloadAll([btn.dataset.path]);
       else if (a === 'delone') { if (!confirm('确认删除该条下载记录？（将同时删除本地文件，不可恢复）')) return; $('dlDetail').classList.add('hidden'); deleteItems([btn.dataset.id]); }
     });
