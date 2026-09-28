@@ -2330,14 +2330,14 @@ function downloadZip(paths) {
       return;
     }
     const a = document.createElement('a');
-    a.href = url;
+    a.href = assetUrl(url);
     a.download = 'videos_' + Date.now() + '.zip';
     document.body.appendChild(a); a.click(); a.remove();
     toast('已打包为单个压缩包，浏览器将提示一次保存位置');
   }).catch(() => {
 
     const a = document.createElement('a');
-    a.href = url; a.download = 'videos_' + Date.now() + '.zip';
+    a.href = assetUrl(url); a.download = 'videos_' + Date.now() + '.zip';
     document.body.appendChild(a); a.click(); a.remove();
     toast('已打包为单个压缩包，浏览器将提示一次保存位置');
   });
@@ -2375,7 +2375,7 @@ function nativeDownloadAll(paths) {
     }
     const fn = basename(paths[i++]);
     const a = document.createElement('a');
-    a.href = '/downloads/' + encodeURIComponent(fn);
+    a.href = assetUrl('/downloads/') + encodeURIComponent(fn);
     a.download = fn;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(step, 400);

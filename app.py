@@ -4617,7 +4617,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-Type", "application/octet-stream")
                 self.send_header("Content-Length", str(size))
-                self.send_header("Content-Disposition", "attachment")
+                from urllib.parse import quote as _q
+                self.send_header("Content-Disposition",
+                                 "attachment; filename*=UTF-8''" + _q(fname))
                 self.send_header("Accept-Ranges", "none")
                 self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
